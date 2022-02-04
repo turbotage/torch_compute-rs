@@ -3,6 +3,7 @@ pub mod shunter;
 pub mod functions;
 pub mod operators;
 pub mod varnum;
+mod nodes;
 mod lexer;
 
 use crate::expression::{
@@ -18,6 +19,8 @@ use crate::expression::{
 pub enum Token {
 	NoToken,
 	Number(Number),
+	Zero,
+	Unity,
 	Variable(Variable),
 	Function(Function),
 	Operator(Operator),
@@ -60,4 +63,7 @@ impl Default for Context {
 	}
 
 }
+
+
+
 

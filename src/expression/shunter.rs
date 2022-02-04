@@ -30,7 +30,7 @@ pub fn shunt(expr: &str, context: &Context) -> anyhow::Result<Vec<Token>> {
 	for ref token in tokens {
 		match token { // check this, unecessary clone
 			Token::NoToken => {},
-			Token::Number(_) => output.push(token.clone()),
+			Token::Number(_) | Token::Unity | Token::Zero => output.push(token.clone()),
 			Token::Variable(_) => output.push(token.clone()),
 			Token::Function(_) => operator_stack.push(token.clone()),
 			Token::Operator(op) => {
