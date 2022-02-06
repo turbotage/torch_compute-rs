@@ -58,6 +58,19 @@ pub fn shunt(expr: &str, context: &Context) -> anyhow::Result<Vec<Token>> {
 	return Ok(output);
 }
 
+pub fn stringify_rpn(postfix: &Vec<Token>) -> String {
+	let mut capacity = 0;
+	for tok in postfix {
+		capacity += tok.len();
+	}
+	let mut ret = String::with_capacity(capacity);
+	for tok in postfix {
+		ret += tok.stringify();
+		ret += ",";
+	}
+	return ret;
+}
+
 fn handle_operator(operator_stack: &mut Vec<Token>, output: &mut Vec<Token>, operator: &Operator) -> anyhow::Result<()> {
 	use crate::expression::operators::Op;
 

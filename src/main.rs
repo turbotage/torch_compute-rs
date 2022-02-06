@@ -37,17 +37,80 @@ use fancy_regex::Regex;
 use crate::expression::{
     varnum::Variable,
     Context,
-    shunter,
+    shunter, operators::{Operator, Op},
 };
 
 fn main() {
     
-    let expr = "sin(3*X)*2";
+    let expr = "sin(X)*max(X,Y)+cos(sin(X)*cos(Y))+cos(Y)*cos(Y)";
     let mut context: Context = Context::default();
     context.add_variable(Variable::new("X"));
+	context.add_variable(Variable::new("Y"));
     let rpn = shunter::shunt(expr, &context);
-    println!("rpn notation: {:?}", rpn);
+    println!("full rpn notation: {:?}", rpn);
+	if let Ok(rpn) = rpn {
+		let rpnstr = shunter::stringify_rpn(&rpn);
+		println!("rpn notation: {}", rpnstr);
+
+		let mut pairs: Vec<(u32, String)> = vec![];
+
+		for i in 0..rpn.len() {
+			if rpn[i].stringify().eq("Y") {
+				if let Some(next) = rpn.iter().nth(i+1) {
+					match next {
+						expression::Token::Operator(op) => {
+							match op {
+								Operator::UnaryOperator(unop) => {
+									pairs.push((i.try_into().unwrap(), unop.get_token().to_owned() + "Y"));
+								}
+								_ => {},
+							}
+						},
+						expression::Token::Function(func) => {
+							if func.get_n_inputs().eq(&1) {
+								pairs.push((i.try_into().unwrap(), func.get_token().to_owned() + "Y"));
+							}
+						}
+						_ => {},
+					}
+				}
+			}
+		}
+
+		println!("Y Leaf pairs: {:?}", pairs);
+
+		let mut pairs: Vec<(u32, String)> = vec![];
+
+		for i in 0..rpn.len() {
+			if rpn[i].stringify().eq("X") {
+				if let Some(next) = rpn.iter().nth(i+1) {
+					match next {
+						expression::Token::Operator(op) => {
+							match op {
+								Operator::UnaryOperator(unop) => {
+									pairs.push((i.try_into().unwrap(), unop.get_token().to_owned() + "X"));
+								}
+								_ => {},
+							}
+						},
+						expression::Token::Function(func) => {
+							if func.get_n_inputs().eq(&1) {
+								pairs.push((i.try_into().unwrap(), func.get_token().to_owned() + "X"));
+							}
+						}
+						_ => {},
+					}
+				}
+			}
+		}
+
+		println!("Y Leaf pairs: {:?}", pairs);
+
+
+	}
     
+	
+
 
     /*
     let reg = fancy_regex::Regex::new(

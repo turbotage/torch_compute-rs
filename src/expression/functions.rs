@@ -52,5 +52,7 @@ pub (super) fn begins_with_function<'a>(expr: &str, _tokens: &Vec<Token>, contex
 pub fn default_functions() -> Vec<Function> {
     return vec![
         Function::new("sin", 1),
+		Function::new("cos", 1),
+		Function::new("max", 2),
     ];
 }
