@@ -53,7 +53,7 @@ fn main() {
 		println!("rpn notation: {}", rpnstr);
 
 		let mut pairs: Vec<(u32, String)> = vec![];
-
+		
 		for i in 0..rpn.len() {
 			if rpn[i].stringify().eq("Y") {
 				if let Some(next) = rpn.iter().nth(i+1) {

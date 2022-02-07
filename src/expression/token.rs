@@ -1,12 +1,4 @@
 
-pub mod shunter;
-pub mod functions;
-pub mod operators;
-pub mod varnum;
-mod nodes;
-mod lexer;
-
-
 
 use crate::expression::{
 	functions::Function,
@@ -105,6 +97,3 @@ impl Default for Context {
 	}
 
 }
-
-
-
