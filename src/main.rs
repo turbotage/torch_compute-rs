@@ -32,16 +32,14 @@ fn main() {
 
 mod expression;
 
-use fancy_regex::Regex;
-
 use crate::expression::{
     varnum::Variable,
     Context,
     shunter, operators::{Operator, Op},
 };
 
-fn main() {
-    
+fn test_shunting() {
+	
     let expr = "sin(X)*max(X,Y)+cos(sin(X)*cos(Y))+cos(Y)*cos(Y)";
     let mut context: Context = Context::default();
     context.add_variable(Variable::new("X"));
@@ -109,22 +107,21 @@ fn main() {
 
 	}
     
+}
+
+fn main() {
+    
+	use indextree_ng::Arena;
+
+	let expr = "sin(X)*max(X,Y)+cos(sin(X)*cos(Y))+cos(Y)*cos(Y)";
+    let mut context: Context = Context::default();
+    context.add_variable(Variable::new("X"));
+	context.add_variable(Variable::new("Y"));
+    let rpn = shunter::shunt(expr, &context);
+
 	
 
 
-    /*
-    let reg = fancy_regex::Regex::new(
-        r"^(?=[iI.\d+-])([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?![iI.\d]))?([+-]?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)?[iI])?");
-    let reg = reg.unwrap();
     
-    let expr = "-3.0e1+2e-5i)*2";
-    let result = reg.find(expr);
-    assert!(result.is_ok());
-    let match_option = result.unwrap();
-    if match_option.is_some() {
-        let m = match_option.unwrap();
-        println!("match: {}", m.as_str());
-    }
-    */
 
 }

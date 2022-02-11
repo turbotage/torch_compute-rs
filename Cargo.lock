@@ -162,6 +162,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
+name = "indextree-ng"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6f1d0e76b441a6a330354e61d6ae1ab661d5d1757ffb6c05b31afc46da6423d"
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -459,6 +465,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fancy-regex",
+ "indextree-ng",
  "lazy_static",
  "tch",
 ]
