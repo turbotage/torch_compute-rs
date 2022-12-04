@@ -1,7 +1,11 @@
 
-use std::{rc::{Rc, Weak}, cell::RefCell, borrow::BorrowMut};
+use std::{rc::{Rc, Weak}, cell::RefCell, borrow::BorrowMut, process::Command};
+
+use std::collections::HashMap;
 
 use core::fmt::Debug;
+
+use anyhow::{Context, Result};
 
 use super::{Token, varnum, functions, operators::{self, Operator}};
 
@@ -17,90 +21,6 @@ pub trait UnityMake<T> {
 
 pub trait LeafMake<T>: StrMake<T> + ZeroMake<T> + UnityMake<T> {}
 
-
-trait NodeId {
-	fn get_token(&self) -> &Token;
-
-	fn get_name(&self) -> &str;
-
-	fn get_full_name(&self) -> String;
-}
-
-#[derive(Debug, Clone)]
-pub struct LeafNode<T> {
-	token:		Token,
-	value: 		Rc<T>,
-	unity: 		bool,
-	zero:		bool,
-}
-
-impl<T> LeafNode<T> where T: LeafMake<T>
-{
-
-	fn from_number(num: &varnum::Number) -> Self {
-		Self {
-			token: Token::Number(num.clone()),
-			value: {
-				Rc::new(T::from_str(num.get_token()))
-			},
-			unity: false,
-			zero: false,
-		}
-	}
-	
-	fn from_variable(var: &varnum::Variable, expr: &Expression<T>) -> Self where T: ExprType<T> {
-		Self {
-			token: Token::Variable(var.clone()),
-			value: match expr.get_variable(var.get_token()) {
-				Some(var) => var,
-				None => panic!("Expression was 
-					not supplied with variable matching token name {}", var.get_token()),
-			},
-			unity: false,
-			zero: false,
-				
-		}
-	}
-
-	fn from_zero() -> Self {
-		Self {
-			parent: Weak::new(),
-			token: Token::Zero,
-			value: Rc::new(T::from_zero()),
-			unity: false,
-			zero: true,
-			children: vec![],
-				
-		}
-	}
-
-	fn from_unity() -> Self {
-		Self {
-			parent: Weak::new(),
-			token: Token::Unity,
-			value: Rc::new(T::from_unity()),
-			unity: true,
-			zero: false,
-			children: vec![],
-				
-		}
-	}
-}
-
-impl<T> NodeId for LeafNode<T> {
-	fn get_token(&self) -> &Token {
-		&self.token
-	}
-
-	fn get_name(&self) -> &str {
-		self.token.stringify()
-	}
-
-	fn get_full_name(&self) -> String {
-		self.get_name().to_string()
-	}
-}
-
 // Required arithmatic traits
 use std::ops::{Add, Sub, Mul, Div, Neg};
 pub trait Pow<Rhs = Self> {
@@ -112,342 +32,168 @@ pub trait ExprType<T>: Add<T> + Sub<T> + Mul<T> + Div<T> + Pow<T> + Neg
 	+ LeafMake<T> + Debug {}
 
 
-
-
 #[derive(Debug, Clone)]
-pub struct UnaryOperatorNode<T> {
-	parent: 	Weak<Node<T>>,
-	token: 		Token,
-	child: 		Option<Box<Node<T>>>,
-}
-
-impl<T> NodeId for UnaryOperatorNode<T> {
-	fn get_token(&self) -> &Token {
-		&self.token
-	}
-
-	fn get_name(&self) -> &str {
-		self.token.stringify()
-	}
-
-	fn get_full_name(&self) -> String {
-		let mut fullname = String::with_capacity(2);
-		if let Some(child) = &self.child {
-			fullname += &(child.get_full_name() + ",")
-		}
-		else {
-			fullname += ",";
-		}
-		fullname += self.get_name();
-		return fullname;
-	}
+pub enum NodeType {
+	LeafNode,
+	UnaryOperator,
+	BinaryOperator,
+	Function,
 }
 
 #[derive(Debug, Clone)]
-pub struct BinaryOperatorNode<T> {
-	parent: 	Weak<Node<T>>,
-	token:		Token,
-	lhchild: 	Option<Box<Node<T>>>,
-	rhchild: 	Option<Box<Node<T>>>,
+pub enum CommutativityType {
+	Commutative,
+	AntiCommutative,
 }
-
-impl<T> NodeId for BinaryOperatorNode<T> {
-	fn get_token(&self) -> &Token {
-		&self.token
-	}
-
-	fn get_name(&self) -> &str {
-		self.token.stringify()
-	}
-
-	fn get_full_name(&self) -> String {
-		let mut fullname = String::from("");
-		if let Some(lh) = &self.lhchild {
-			fullname += &(lh.get_full_name() + ",");
-		}
-		else {
-			fullname += ",";
-		}
-
-		if let Some(rh) = &self.rhchild {
-			fullname += &(rh.get_full_name() + ",");
-		}
-		else {
-			fullname += ",";
-		}
-
-		fullname += self.get_name();
-		return fullname;
-	}
-}
-
 
 #[derive(Debug, Clone)]
-pub enum OperatorNode<T>{
-	UnaryOperator(UnaryOperatorNode<T>),
-	BinaryOperator(BinaryOperatorNode<T>),
-}
-
-impl<T> NodeId for OperatorNode<T> {
-	fn get_token(&self) -> &Token {
-		match self {
-			OperatorNode::UnaryOperator(unop) => return unop.get_token(),
-			OperatorNode::BinaryOperator(biop) => return biop.get_token(),
-		}
-	}
-
-	fn get_name(&self) -> &str {
-		match self {
-			OperatorNode::UnaryOperator(unop) => return unop.get_name(),
-			OperatorNode::BinaryOperator(biop) => return biop.get_name(),
-		}
-	}
-
-	fn get_full_name(&self) -> String {
-		match self {
-			OperatorNode::UnaryOperator(unop) => return unop.get_full_name(),
-			OperatorNode::BinaryOperator(biop) => return biop.get_full_name(),
-		}
-	}
-}
-
-
-
-#[derive(Debug, Clone)]
-pub struct FunctionNode<T> {
-	parent: Weak<Node<T>>,
+pub struct Node<'a, T> {
+	expr: &'a Expression<'a, T>,
+	node_type: NodeType,
 	token: Token,
-	children: Vec<Box<Node<T>>>,
+	commutativity: Option<CommutativityType>,
+	order_of_inputs: Option<Vec<(CommutativityType,Vec<usize>)>>,
+	parents: Vec<&'a str>,
+	children: Vec<&'a str>,
 }
 
-impl<T> NodeId for FunctionNode<T> {
-	fn get_token(&self) -> &Token {
-		&self.token
-	}
-
-	fn get_name(&self) -> &str {
-		self.token.stringify()
-	}
-
-
-	fn get_full_name(&self) -> String {
-		let mut full_name = String::from("");
-
-		for child in &self.children {
-			full_name += &(child.get_full_name() + ",");
+impl<T> Node<'_, T> {
+	
+	fn get_full_name(&self) -> anyhow::Result<&str> {
+		let child_full_names: Vec<&str>;
+		for childstr in self.children {
+			child_full_names.push(self.expr.get_node(childstr).context("Child str wasn't found in node map"));
 		}
-		full_name += self.get_name();
+
+		// Sort
+		for input_group in self.order_of_inputs.unwrap_or().iter() {
+			let group_strs = Vec::with_capacity((input_group.1).count());
+			for input in input_group.1 {
+				group_strs.push(child_full_names[input]);
+			}
+
+			if group_strs.is_sorted() { 
+				continue; 
+			}
+
+			group_strs.sort_unstable();
+
+			for (i, input) in input_group.1.iter().enumerate() {
+				child_full_names[*input] = group_strs[i];
+			}
+		}
+
+		let tokstr = self.token.stringify();
+		let capacity = 0;
+		for child_full_name in child_full_names {
+			capacity += child_full_name.len() + 1;
+		}
+		capacity += tokstr.len();
+		let full_name = String::with_capacity(capacity);
+		for child_full_name in child_full_names {
+			full_name += child_full_name;
+		}
 
 		return full_name;
 	}
-}
 
+}
 
 #[derive(Debug, Clone)]
-pub enum Node<T> {
-	LeafNode(LeafNode<T>),
-	Operator(OperatorNode<T>),
-	Function(FunctionNode<T>),
+pub struct Expression<'a, T> {
+	map: HashMap<&'a str, Node<'a, T>>,
+	leafs: Vec<&'a T>
 }
 
-impl<T> NodeId for Node<T> {
-	fn get_token(&self) -> &Token {
-		match self {
-			Node::LeafNode(leaf) => {
-				return leaf.get_token();
-			},
-			Node::Operator(op) => {
-				return op.get_token();
-			}
-			Node::Function(func) => {
-				return func.get_token();
-			}
-		}
-	}
+impl<T> Expression<'_, T> {
 
-	fn get_name(&self) -> &str {
-		match self {
-			Node::LeafNode(leaf) => {
-				return leaf.get_name();
-			},
-			Node::Operator(op) => {
-				return op.get_name();
-			}
-			Node::Function(func) => {
-				return func.get_name();
-			}
-		}	
-	}
+	fn from_tokens(tokens: &Vec<Token>) -> anyhow::Result<Self> {
 
-	fn get_full_name(&self) -> String {
-		match self {
-			Node::LeafNode(leaf) => {
-				return leaf.get_full_name();
-			},
-			Node::Operator(op) => {
-				return op.get_full_name();
-			}
-			Node::Function(func) => {
-				return func.get_full_name();
-			}
-		}
-	}
-}
-
-
-pub struct FuncFactory<T> where T: ExprType<T> {
-	eval_mapper: fn(&functions::Function) -> Option<fn(&Vec<Rc<Node<T>>>) -> T>,
-	diff_mapper: fn(&functions::Function) -> Option<fn(&Vec<Rc<Node<T>>>) -> Node<T>>,
-}
-
-pub struct UnaryOpFactory<T> where T: ExprType<T> {
-	eval_mapper: fn(&operators::UnaryOperator) -> Option<fn(&Rc<Node<T>>) -> T>,
-	diff_mapper: fn(&operators::UnaryOperator) -> Option<fn(&Rc<Node<T>>) -> Node<T>>,
-}
-
-pub struct BinaryOpFactory<T> where T: ExprType<T> {
-	eval_mapper: fn(&operators::BinaryOperator) -> Option<fn(&Rc<Node<T>>, &Rc<Node<T>>) -> T>,
-	diff_mapper: fn(&operators::BinaryOperator) -> Option<fn(&Rc<Node<T>>, &Rc<Node<T>>) -> Node<T>>,
-}
-
-pub struct Expression<'a, T> where T: ExprType<T> {
-	variables: Vec<(String, Rc<T>)>,
-	func_factory: FuncFactory<T>,
-	unop_factory: UnaryOpFactory<T>,
-	biop_factory: BinaryOpFactory<T>,
-	nodes: Vec<Box<Node<T>>>,
-	leafs: Vec<&'a mut Box<Node<T>>>,
-}
-
-impl<T> Expression<'_, T> where T: ExprType<T> {
-
-	pub fn from_tokens(tokens: &Vec<Token>,
-		variables: &Vec<(String, Rc<T>)>,
-		func_factory: FuncFactory<T>,
-		unop_factory: UnaryOpFactory<T>,
-		biop_factory: BinaryOpFactory<T>) -> anyhow::Result<Self> 
-	{
-		// Create Expression object
-		let mut expr = Self {
-			variables: variables.clone(),
-			func_factory: func_factory,
-			unop_factory: unop_factory,
-			biop_factory: biop_factory,
-			nodes: Vec::with_capacity(tokens.len()),
+		let expr = Self {
+			map: HashMap::new(),
 			leafs: vec![],
 		};
+ 
+		expr.build_graph(tokens);
 
-		// Create vector of nodes
+	}
+
+	fn build_graph(&self, tokens: &Vec<Token>) -> anyhow::Result<()> {
+		let nodestack: Vec<&Node<T>>;
 		for tok in tokens {
-			let node = expr.tok_to_node(tok)?;
-			expr.nodes.push(Box::new(node));
-		}
+			let nodetype = Expression::get_node_type(*tok);
+			let nodetype = nodetype.ok_or("Found token that had no corresponding node")?;
 
-		// Identify Leafs
-		{
-			for node in expr.nodes.iter_mut() {
-				match node.as_ref() {
-					Node::LeafNode(_) => {
-						expr.leafs.push(node);
-					},
-					_ => continue,
+			let tokstr = tok.stringify();
+
+			match nodetype {
+				NodeType::LeafNode => {
+					let matchnode = self.map.get(tokstr);
+					if let Some(matchnode) = matchnode {
+						nodestack.push(matchnode);
+					}
+					else {
+						let ret = self.map.insert(tokstr, Node 
+						{ 
+							expr: self, 
+							node_type: NodeType::LeafNode,
+							commutativity: None,
+							order_of_inputs: None,
+							token: *tok, 
+							parents: vec![], 
+							children: vec![],
+						});
+						if let Some(ret) = &ret {
+							nodestack.push(ret);
+						}
+						else {
+							return Err(anyhow::anyhow!("Insert failed, tried to push already existing node"));
+						}
+					}
+				},
+				NodeType::UnaryOperator => {
+					let prevnode = nodestack.pop();
+				},
+				NodeType::BinaryOperator => {
+
+				},
+				NodeType::Function => {
+
 				}
 			}
+
+			let tokname = tok.stringify();
+			if let Some(node) = self.map.get(tokname) {
+				
+			}
+			
 		}
 
-		// Simplify
-
-
-		return Ok(expr);
-
+		return Ok(());
 	}
 
-	fn tok_to_node(&self, token: &Token) -> anyhow::Result<Node<T>> 
-		where T: ExprType<T>
-	{
+
+	fn get_node_type(token: Token) -> Option<NodeType> {
 		match token {
-			Token::Number(num) => {
-				return Ok(Node::LeafNode(LeafNode::<T>::from_number(num)));
-			},
-			Token::Variable(var) => {
-				return Ok(Node::LeafNode(LeafNode::<T>::from_variable(var, self)))
-			},
-			Token::Zero => 
-				return Ok(Node::LeafNode(LeafNode::<T>::from_zero())),
-			Token::Unity =>
-				return Ok(Node::LeafNode(LeafNode::<T>::from_unity())),
-			Token::Function(func) => 
-				return self.func_to_node(token, func),
-			Token::Operator(op) => 
-				return self.op_to_node(token, op),
-			_ => return Err(anyhow::anyhow!("Found non convertible token: {}", token.stringify())),
-		}
-	}
-
-	fn func_to_node(&self, token: &Token, func: &functions::Function) -> anyhow::Result<Node<T>> {
-		// Extended functions
-		if let Some(eval_func) = (self.func_factory.eval_mapper)(func) {
-			if let Some(diff_func) = (self.func_factory.diff_mapper)(func) {
-				return Ok(Node::Function(FunctionNode::<T> {
-					parent: Weak::new(),
-					token: token.clone(),
-					children: Vec::with_capacity(func.get_n_inputs().into()),
-				}));
-			}
-			return Err(anyhow::anyhow!("diff_mapper for func_factory hadn't implemented the function token: {}", token.stringify()));
-		}
-		return Err(anyhow::anyhow!("eval_mapper for func_factory hadn't implemented the function token: {}", token.stringify()));
-	}
-
-	fn op_to_node(&self, token: &Token, op: &operators::Operator)-> anyhow::Result<Node<T>> {
-		match op {
-			Operator::UnaryOperator(unop) => {
-				// Extended unary operators
-				if let Some(eval_func) = (self.unop_factory.eval_mapper)(unop) {
-					if let Some(diff_func) = (self.unop_factory.diff_mapper)(unop) {
-						let unop = UnaryOperatorNode::<T> {
-							parent: Weak::new(),
-							token: token.clone(),
-							child: None,
-						};
-						return Ok(Node::Operator(OperatorNode::UnaryOperator(unop)));
-					}
-					return Err(anyhow::anyhow!("diff_mapper for func_factory hadn't implemented the function token: {}", token.stringify()));
+			Token::Number(_) 	=> return Some(NodeType::LeafNode),
+			Token::Zero 		=> return Some(NodeType::LeafNode),
+			Token::Unity 		=> return Some(NodeType::LeafNode),
+			Token::Variable(_) 	=> return Some(NodeType::LeafNode),
+			Token::Function(_) 	=> return Some(NodeType::LeafNode),
+			Token::Operator(op) => {
+				match op {
+					Operator::UnaryOperator(_) => return Some(NodeType::UnaryOperator),
+					Operator::BinaryOperator(_) => return Some(NodeType::BinaryOperator),
 				}
-				return Err(anyhow::anyhow!("eval_mapper for func_factory hadn't implemented the function token: {}", token.stringify()));
-			}
-			Operator::BinaryOperator(biop) => {
-				// Extended unary operators
-				if let Some(eval_func) = (self.biop_factory.eval_mapper)(biop) {
-					if let Some(diff_func) = (self.biop_factory.diff_mapper)(biop) {
-						let biop = BinaryOperatorNode::<T> {
-							parent: Weak::new(),
-							token: token.clone(),
-							lhchild: None,
-							rhchild: None,
-						};
-						return Ok(Node::Operator(OperatorNode::BinaryOperator(biop)));
-					}
-					return Err(anyhow::anyhow!("diff_mapper for func_factory hadn't implemented the function token: {}", token.stringify()));
-				}
-				return Err(anyhow::anyhow!("eval_mapper for func_factory hadn't implemented the function token: {}", token.stringify()));
-			}
+			},
+			_ => return None,
 		}
 	}
 
-	
-	fn simplify(&self) {
-		
-	}
-	
-
-	fn get_variable(&self, name: &str) -> Option<Rc<T>> {
-		for var in &self.variables {
-			if var.0.eq(name) {
-				return Some(var.1.clone());
-			}
-		}
-		return None;
+	fn get_node(&self, nodestr: &str) -> Option<&Node<T>> {
+		self.map.get(nodestr)
 	}
 
 }
+
+

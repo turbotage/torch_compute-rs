@@ -3,7 +3,6 @@ pub mod shunter;
 pub mod functions;
 pub mod operators;
 pub mod varnum;
-pub mod nodes;
 mod lexer;
 
 

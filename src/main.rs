@@ -38,6 +38,10 @@ use crate::expression::{
     shunter, operators::{Operator, Op},
 };
 
+use std::time::{Duration, Instant};
+
+use cpython::{Python, PyDict, PyList, PyString, PyResult, ToPyObject, py_capsule};
+
 fn test_shunting() {
 	
     let expr = "sin(X)*max(X,Y)+cos(sin(X)*cos(Y))+cos(Y)*cos(Y)";
@@ -110,18 +114,58 @@ fn test_shunting() {
 }
 
 fn main() {
+	/*
+	let gil = Python::acquire_gil();
+    run_expr(gil.python()).unwrap();
+	*/
+
+	
+	let now = Instant::now();
+	test_shunting();
+	println!("Time elapsed: {}", now.elapsed().as_millis());
+	
+
+}
+
+fn run_expr(py: Python) -> PyResult<()> {
     
-	use indextree_ng::Arena;
+	let now = Instant::now();
 
-	let expr = "sin(X)*max(X,Y)+cos(sin(X)*cos(Y))+cos(Y)*cos(Y)";
-    let mut context: Context = Context::default();
-    context.add_variable(Variable::new("X"));
-	context.add_variable(Variable::new("Y"));
-    let rpn = shunter::shunt(expr, &context);
+	let sys = py.import("sys")?;
 
+	let mut sys_path: Vec<String> = sys.get(py, "path")?.extract(py)?;
+	sys_path.insert(0, "./pyth/".into());
+	sys.add(py, "path", sys_path);
+
+	let module = py.import("expr")?;
+
+	let pyexpr = PyString::new(py, "1.0*sin(x)^2+2*cos(x)^2+1.045e-6+I+exp(I)+tan(sin(x))-exp(tan(sin(x)))+6*tanh(exp(sin(x)))");
+
+	let symbols: PyList = vec!["x", "y"].to_py_object(py);
+
+	let symsdict: PyDict = module.call(py, "get_syms", (symbols,), None)?.extract(py)?;
+
+	let exprout: String = module.call(py, "get_expr", (pyexpr,symsdict,), None, )?.extract(py)?;
+	
+	println!("Time elapsed: {}", now.elapsed().as_millis());
+	println!("Expr: {}", exprout);
+
+
+	// Second time
+	let now = Instant::now();
+
+	let pyexpr = PyString::new(py, "1.0*sin(x)^2+2*cos(x)^2+1.045e-6+I+exp(I)+tan(sin(x))-exp(tan(sin(x)))+6*tanh(exp(sin(x)))");
+
+	let symbols: PyList = vec!["x", "y"].to_py_object(py);
+
+	let symsdict: PyDict = module.call(py, "get_syms", (symbols,), None)?.extract(py)?;
+
+	let exprout: String = module.call(py, "get_expr", (pyexpr,symsdict,), None, )?.extract(py)?;
+	
+	println!("Time elapsed: {}", now.elapsed().as_millis());
+	println!("Expr: {}", exprout);
 	
 
 
-    
-
+	Ok(())
 }
